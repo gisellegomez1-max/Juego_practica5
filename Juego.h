@@ -15,51 +15,30 @@
 class Juego
 {
 public:
-    enum Estado { APUNTANDO, EN_VUELO, TERMINADO };
-
     Juego();
     ~Juego();
 
-    void inicializarJuego();             // también sirve para reiniciar
+    void inicializarJuego();
     void actualizarMundo(double dt);
     void dibujarMundo(QPainter *painter);
-
-    void setAnguloCanon(double grados);  // cañón del jugador en turno
+    void dispararCanon(double fuerza);
+    void setAnguloCanon(double grados);
     void disparar(double fuerza);
 
-    Estado getEstado() const { return estado; }
-    int getTurno() const { return turno; }
-    double getXCanonActual() const { return canones[turno]->getX(); }
-    double getYCanonActual() const { return canones[turno]->getY(); }
-
-    const std::vector<Obstaculo *> &getObstaculos(int i) const { return obstaculos[i]; }
-    const Canon *getCanon(int i) const { return canones[i]; }
-    const Rival *getRival(int i) const { return rivales[i]; }
-    const Jugador *getJugador(int i) const { return jugadores[i]; }
-    const Bola *getProyectil() const { return proyectil; }
-    int getGanador() const { return ganador; }
-
 private:
-    void limpiar();
-    void crearBando(int i);              // 0 = izquierda, 1 = derecha
-    void pasoProyectil(double h);
-    void terminarTurno();
+    int estadoJuego; // 0 = Jugando, 1 = Victoria
 
-    Estado estado = APUNTANDO;
-    int turno = 0;                       // 0 o 1
-    int ganador = -1;
-    double tiempoVuelo = 0.0;
-    int rebotes = 0;
+    // Entidades principales
+    Jugador* jugador;
+    Canon* canon;
+    Bola* proyectil;
+    Rival* rival;
 
-    // Un elemento por jugador
-    Jugador *jugadores[2] = { nullptr, nullptr };
-    Canon *canones[2] = { nullptr, nullptr };
-    Rival *rivales[2] = { nullptr, nullptr };
-    std::vector<Obstaculo *> obstaculos[2];   // obstaculos[i] = infraestructura del jugador i
+    // Colecciones de entidades
+    std::vector<Obstaculo*> obstaculos;
+    std::vector<Pared*> paredes;
 
-    Bola *proyectil = nullptr;
-    std::vector<Pared *> paredes;
-
+    // Sistemas
     MotorFisica motor;
     ResolutorColisiones resolutor;
 };

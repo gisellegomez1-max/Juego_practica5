@@ -24,9 +24,9 @@ VentanaJuego::~VentanaJuego()
 void VentanaJuego::actualizarFrame()
 {
     // Si estamos presionando el click, la fuerza aumenta
-    if (cargandoDisparo && juego->getEstado() == Juego::APUNTANDO) {
-        fuerzaDisparo += 15.0;
-        if (fuerzaDisparo > 1200.0) fuerzaDisparo = 1200.0;
+    if (cargandoDisparo) {
+        fuerzaDisparo += 15.0; // Qué tan rápido carga
+        if (fuerzaDisparo > 1200.0) fuerzaDisparo = 1200.0; // Límite máximo
     }
 
     juego->actualizarMundo(0.016);
@@ -60,33 +60,48 @@ void VentanaJuego::paintEvent(QPaintEvent *event)
 }
 
 void VentanaJuego::keyPressEvent(QKeyEvent *event)
-{       //controles basicos del teclado
-    if (event->key() == Qt::Key_R) {
-        cargandoDisparo = false;
-        juego->inicializarJuego();
+{
+    // Controles básicos del teclado (opcional, puedes borrarlo si solo usarás mouse)
+    if (event->key() == Qt::Key_Space) {
+        juego->dispararCanon(120.0); // Disparo antiguo de prueba
     }
 }
 
-void VentanaJuego::mouseMoveEvent(QMouseEvent *event)
-{
-    const double dx = event->position().x() - juego->getXCanonActual();
-    const double dy = event->position().y() - juego->getYCanonActual();
-    juego->setAnguloCanon(-std::atan2(dy, dx) * (180.0 / M_PI));
+void VentanaJuego::mouseMoveEvent(QMouseEvent *event) {
+    double canonX = 50.0;
+    double canonY = height() - 50.0;
+
+    // Calculamos las diferencias
+    double dx = event->position().x() - canonX;
+    double dy = event->position().y() - canonY;
+
+    // Calculamos el ángulo original
+    double anguloRadianes = std::atan2(dy, dx);
+    double anguloGrados = anguloRadianes * (180.0 / M_PI);
+
+    // Invertir el ángulo para el sistema de coordenadas de Qt
+    anguloGrados = -anguloGrados;
+
+    if (juego != nullptr) {
+        juego->setAnguloCanon(anguloGrados);
+    }
+
     update();
 }
 
-void VentanaJuego::mousePressEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::LeftButton && juego->getEstado() == Juego::APUNTANDO) {
-        cargandoDisparo = true;
-        fuerzaDisparo = 100.0;
+void VentanaJuego::mousePressEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        cargandoDisparo = true;      // Empezar a cargar
+        fuerzaDisparo = 100.0;       // Reiniciar la fuerza al mínimo (100)
     }
 }
 
-void VentanaJuego::mouseReleaseEvent(QMouseEvent *event)
-{
+void VentanaJuego::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && cargandoDisparo) {
-        cargandoDisparo = false;
-        juego->disparar(fuerzaDisparo);
+        cargandoDisparo = false;     // Soltamos el botón
+
+        if (juego != nullptr) {
+            juego->disparar(fuerzaDisparo); // Disparar con la fuerza acumulada
+        }
     }
 }
