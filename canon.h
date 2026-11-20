@@ -12,7 +12,6 @@ public:
     double getAngulo() const;
 
     void dibujar(QPainter *painter) const override;
-    double getLongitud() const { return longitud; }
 
 private:
     double longitud; // Longitud del cañón

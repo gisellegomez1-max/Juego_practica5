@@ -1,178 +1,133 @@
 #include "Juego.h"
 #include <cmath>
 
-namespace {
-const double ANCHO = 800.0;
-const double PISO = 520.0;              // límite inferior de la caja
-const int SUBPASOS = 4;                 // evita que el proyectil atraviese bloques
-const double TIEMPO_MAX_VUELO = 8.0;    // s
-const int MAX_REBOTES = 4;              // rebotes en los límites de la caja
-}
-
-Juego::Juego()
+Juego::Juego() : jugador(nullptr), canon(nullptr), proyectil(nullptr), rival(nullptr), estadoJuego(0)
 {
-    motor.setGravedad(800.0);
-    resolutor = ResolutorColisiones(0.6, 0.1);   // restitución y factor de daño
+    // Configurar sistemas
+    motor.setGravedad(800.0); // <--- CAMBIAR AQUÍ: 800.0 en lugar de 9.8
+    resolutor = ResolutorColisiones(0.6, 0.5); // Restitución y factor de daño
+
     inicializarJuego();
 }
 
 Juego::~Juego()
 {
-    limpiar();
-}
-
-void Juego::limpiar()
-{
+    delete jugador;
+    delete canon;
     delete proyectil;
-    proyectil = nullptr;
-
-    for (int i = 0; i < 2; ++i) {
-        delete jugadores[i];  jugadores[i] = nullptr;
-        delete canones[i];    canones[i] = nullptr;
-        delete rivales[i];    rivales[i] = nullptr;
-        for (Obstaculo *o : obstaculos[i]) delete o;
-        obstaculos[i].clear();
-    }
-    for (Pared *p : paredes) delete p;
-    paredes.clear();
+    delete rival;
+    for (auto p : paredes) delete p;
+    for (auto o : obstaculos) delete o;
 }
 
 void Juego::inicializarJuego()
 {
-    limpiar();
+    // Limpiar estado previo
+    if (proyectil) { delete proyectil; proyectil = nullptr; }
+    obstaculos.clear();
+    paredes.clear();
 
-    estado = APUNTANDO;
-    turno = 0;
-    ganador = -1;
-    tiempoVuelo = 0.0;
-    rebotes = 0;
+    // Crear Entidades (Simulando un nivel)
+    jugador = new Jugador(100, 500, 40, "Player 1", Qt::blue);
+    canon = new Canon(120, 480, 50, Qt::darkGreen);
+    canon->setAngulo(45.0);
 
-    paredes.push_back(new Pared(0, PISO, ANCHO, 80, Qt::darkGray));
+    rival = new Rival(700, 480, 40, 40, Qt::red);
 
-    crearBando(0);
-    crearBando(1);
+    // Suelo y bordes
+    paredes.push_back(new Pared(0, 520, 800, 80, Qt::darkGray));
+
+    // Obstáculos tipo castillo
+    obstaculos.push_back(new Obstaculo(600, 420, 30, 100, 100.0, Qt::darkYellow));
+    obstaculos.push_back(new Obstaculo(650, 480, 30, 40, 50.0, Qt::darkYellow));
 }
 
-// El bando derecho es el reflejo del izquierdo respecto al centro de la caja
-void Juego::crearBando(int i)
+void Juego::dispararCanon(double fuerza)
 {
-    auto X = [i](double x, double ancho) { return i == 0 ? x : ANCHO - x - ancho; };
-    const QColor colorBloque = (i == 0) ? QColor(200, 160, 40) : QColor(180, 100, 60);
+    if (proyectil) delete proyectil;
 
-    jugadores[i] = new Jugador(i == 0 ? 40 : ANCHO - 40, 500, 40,
-                               i == 0 ? "Jugador 1" : "Jugador 2",
-                               i == 0 ? QColor(Qt::blue) : QColor(Qt::darkMagenta));
+    // Convertir ángulo a radianes para calcular el vector inicial
+    double anguloRad = canon->getAngulo() * 3.14159 / 180.0;
 
-    canones[i] = new Canon(i == 0 ? 60 : ANCHO - 60, 470, 50, Qt::darkGreen);
-    canones[i]->setAngulo(i == 0 ? 45.0 : 135.0);
+    proyectil = new Bola(canon->getX(), canon->getY() - 20, 10, 5.0, Qt::black);
 
-    // El rival queda protegido entre el techo y las dos columnas
-    rivales[i] = new Rival(X(140, 40), 440, 40, 80, Qt::red);
-
-    obstaculos[i].push_back(new Obstaculo(X(110, 100), 410, 100, 30, 100.0, colorBloque)); // techo
-    obstaculos[i].push_back(new Obstaculo(X(110, 30), 440, 30, 80, 200.0, colorBloque));   // columna
-    obstaculos[i].push_back(new Obstaculo(X(180, 30), 440, 30, 80, 200.0, colorBloque));   // columna
-}
-
-void Juego::setAnguloCanon(double grados)
-{
-    if (estado != APUNTANDO) return;
-
-    // Solo se apunta hacia arriba (0° a 180°)
-    if (grados < 0.0)
-        grados = (grados > -90.0) ? 0.0 : 180.0;
-
-    canones[turno]->setAngulo(grados);
-}
-
-void Juego::disparar(double fuerza)
-{
-    if (estado != APUNTANDO) return;
-
-    Canon *c = canones[turno];
-    const double a = c->getAngulo() * M_PI / 180.0;
-
-    delete proyectil;
-    proyectil = new Bola(c->getX(), c->getY(), 5.0, 1.0,
-                         turno == 0 ? QColor(Qt::blue) : QColor(Qt::magenta));
-    proyectil->establecerVelocidad(Vector2D(fuerza * std::cos(a), -fuerza * std::sin(a)));
-
-    tiempoVuelo = 0.0;
-    rebotes = 0;
-    estado = EN_VUELO;
+    // Eje Y en Qt es invertido (crece hacia abajo), por lo que restamos en Y
+    proyectil->establecerVelocidad(Vector2D(fuerza * std::cos(anguloRad), -fuerza * std::sin(anguloRad)));
 }
 
 void Juego::actualizarMundo(double dt)
 {
-    if (estado != EN_VUELO || !proyectil) return;
+    if (estadoJuego != 0) return; // Si ya ganó, detener lógica
 
-    const double h = dt / SUBPASOS;
-    for (int k = 0; k < SUBPASOS && estado == EN_VUELO; ++k)
-        pasoProyectil(h);
+    if (proyectil) {
+        // 1. Aplicar Gravedad y Movimiento
+        motor.actualizarMovimiento(proyectil, dt);
 
-    tiempoVuelo += dt;
-    if (estado == EN_VUELO && (tiempoVuelo > TIEMPO_MAX_VUELO || rebotes >= MAX_REBOTES))
-        terminarTurno();
-}
+        // 2. ¡NUEVO!: Comprobar si toca el suelo (520). Si es así, se destruye.
+        if (proyectil->getY() + proyectil->getRadio() >= 520.0) {
+            delete proyectil;
+            proyectil = nullptr;
+            return; // Salimos de la función inmediatamente para evitar errores
+        }
 
-void Juego::pasoProyectil(double h)
-{
-    // 1. Gravedad y movimiento
-    motor.actualizarMovimiento(proyectil, h);
+        // 3. Colisiones con las otras paredes (laterales y techo).
+        // Le pasamos un alto muy grande (2000) para que el resolutor ya no
+        // intercepte la bola por abajo, ya que lo hicimos manualmente arriba.
+        resolutor.resolverPared(proyectil, 800, 2000);
 
-    // 2. Límites de la caja: perfectamente elásticos (el piso es el límite inferior)
-    if (resolutor.resolverPared(proyectil, ANCHO, PISO))
-        ++rebotes;
+        // 4. Colisiones con Obstáculos Destructibles
+        for (auto obs : obstaculos) {
+            resolutor.resolverProyectilObstaculo(proyectil, obs, true);
+        }
 
-    // 3. Infraestructura: rebota contra los dos bandos, pero solo daña la del rival
-    for (int b = 0; b < 2; ++b)
-        for (Obstaculo *o : obstaculos[b])
-            resolutor.resolverProyectilObstaculo(proyectil, o, b != turno);
-
-    // 4. ¿Alcanzó al representante enemigo?
-    if (resolutor.tocaRival(proyectil, rivales[1 - turno])) {
-        ganador = turno;
-        estado = TERMINADO;
+        // 5. Colisión final con el Rival
+        if (resolutor.tocaRival(proyectil, rival)) {
+            estadoJuego = 1; // ¡Victoria!
+        }
     }
-}
-
-void Juego::terminarTurno()
-{
-    delete proyectil;
-    proyectil = nullptr;
-
-    turno = 1 - turno;
-    tiempoVuelo = 0.0;
-    rebotes = 0;
-    estado = APUNTANDO;
 }
 
 void Juego::dibujarMundo(QPainter *painter)
 {
-    for (Pared *p : paredes) p->dibujar(painter);
+    for (auto p : paredes) p->dibujar(painter);
+    for (auto o : obstaculos) o->dibujar(painter);
 
-    for (int i = 0; i < 2; ++i) {
-        for (Obstaculo *o : obstaculos[i]) o->dibujar(painter);
-        rivales[i]->dibujar(painter);
-        jugadores[i]->dibujar(painter);
-        canones[i]->dibujar(painter);
-    }
+    if (rival) rival->dibujar(painter);
+    if (jugador) jugador->dibujar(painter);
+    if (canon) canon->dibujar(painter);
     if (proyectil) proyectil->dibujar(painter);
 
-    // Texto de estado
-    painter->setPen(Qt::black);
-    QFont font = painter->font();
-
-    if (estado == TERMINADO) {
+    // Dibujar texto de estado si hay victoria
+    if (estadoJuego == 1) {
+        painter->setPen(Qt::black);
+        QFont font = painter->font();
         font.setPointSize(24);
         painter->setFont(font);
-        painter->drawText(220, 200, QString("¡VICTORIA DEL JUGADOR %1!").arg(ganador + 1));
-        font.setPointSize(10);
-        painter->setFont(font);
-        painter->drawText(300, 230, "Presiona R para reiniciar");
-    } else {
-        font.setPointSize(12);
-        painter->setFont(font);
-        painter->drawText(330, 25, QString("Turno: Jugador %1").arg(turno + 1));
+        painter->drawText(300, 200, "¡VICTORIA!");
+    }
+}
+
+void Juego::setAnguloCanon(double grados) {
+    if (canon != nullptr) {
+        canon->setAngulo(grados); // Asumiendo que tu Canon tiene un método setAngulo
+    }
+}
+
+// Cambia la implementación de la función así:
+void Juego::disparar(double fuerza) {
+    if (canon != nullptr) {
+        if (proyectil != nullptr) {
+            delete proyectil;
+            proyectil = nullptr;
+        }
+
+        double anguloRad = canon->getAngulo() * (M_PI / 180.0);
+
+        // USAMOS LA FUERZA QUE PASAMOS POR PARÁMETRO
+        double vx = fuerza * std::cos(anguloRad);
+        double vy = -fuerza * std::sin(anguloRad);
+
+        proyectil = new Bola(canon->getX(), canon->getY(), 5.0, 1.0, QColor(Qt::red));
+        proyectil->establecerVelocidad(Vector2D(vx, vy));
     }
 }
