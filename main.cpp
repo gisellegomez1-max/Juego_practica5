@@ -1,9 +1,13 @@
-#include <iostream>
+#include <QApplication>
+#include "VistaJuego.h"
 
-using namespace std;
-
-int main()
+int main(int argc, char *argv[])
 {
-    cout << "Hello World!" << endl;
-    return 0;
+    QApplication app(argc, argv);
+
+    VistaJuego vista;
+    vista.setWindowTitle("Simulador de Física - Práctica 5");
+    vista.show();
+
+    return app.exec();
 }
